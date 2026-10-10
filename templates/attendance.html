@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance Management Console — SmartAttend AI{% endblock %}
+{% block breadcrumb %}Attendance Management Console{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
+        <div>
+            <h3 class="fw-bold mb-1 text-dark">Attendance Management Console</h3>
+            <p class="text-muted small mb-0">Record, update, or batch import student attendance with automated shortage classification.</p>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <button class="btn btn-primary btn-sm d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#recordAttendanceModal">
+                <i class="fa-solid fa-plus"></i>
+                <span>Record Attendance</span>
+            </button>
+            <button class="btn btn-outline-primary btn-sm d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#uploadCsvModal">
+                <i class="fa-solid fa-file-arrow-up"></i>
+                <span>Upload CSV Dataset</span>
+            </button>
+            <a href="{{ url_for('attendance.download_template') }}" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-2">
+                <i class="fa-solid fa-file-csv"></i>
+                <span>Download Template</span>
+            </a>
+            <a href="{{ url_for('attendance.download_sample') }}" class="btn btn-outline-info btn-sm d-flex align-items-center gap-2">
+                <i class="fa-solid fa-download"></i>
+                <span>Sample Data</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter & Search Toolbar -->
+    <div class="dashboard-card mb-4">
+        <div class="dashboard-card-body p-3">
+            <form method="GET" action="{{ url_for('attendance.manage_attendance') }}" class="row g-2 align-items-center">
+                <div class="col-md-5">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+                        <input type="text" name="search" class="form-control" placeholder="Search student ID, student name, or course..." value="{{ search }}">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <select name="course_id" class="form-select form-select-sm">
+                        <option value="">All Courses & Subjects</option>
+                        {% for c in courses %}
+                        <option value="{{ c.id }}" {% if selected_course_id == c.id %}selected{% endif %}>
+                            {{ c.course_id }} — {{ c.course_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm flex-grow-1">Filter Records</button>
+                    <a href="{{ url_for('attendance.manage_attendance') }}" class="btn btn-outline-secondary btn-sm" title="Clear Filters">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Attendance Records Table -->
+    <div class="dashboard-card mb-4">
+        <div class="dashboard-card-header">
+            <h5 class="dashboard-card-title">
+                <i class="fa-solid fa-table-list text-primary"></i> Attendance Records ({{ records | length }})
+            </h5>
+            <span class="text-muted small">Target Benchmark: 75.0%</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-custom">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Course</th>
+                        <th>Attended / Total</th>
+                        <th>Remaining</th>
+                        <th>Current %</th>
+                        <th>Status</th>
+                        <th>Required To 75%</th>
+                        <th>Recovery Feasibility</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in records %}
+                    <tr>
+                        <td>
+                            <div class="fw-bold">{{ r.student.name }}</div>
+                            <small class="text-muted">{{ r.student.student_id }} &bull; {{ r.student.department }} (Y{{ r.student.year }})</small>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border">{{ r.course.course_id }}</span>
+                            <small class="d-block text-muted text-truncate" style="max-width: 140px;">{{ r.course.course_name }}</small>
+                        </td>
+                        <td>
+                            <strong>{{ r.attended }}</strong> / {{ r.total_conducted }}
+                            <small class="text-muted d-block">{{ r.total_conducted - r.attended }} missed</small>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-secondary border">{{ r.remaining_classes }}</span>
+                        </td>
+                        <td>
+                            <div class="fw-bold">{{ r.percentage }}%</div>
+                            <div class="progress progress-attendance mt-1" style="width: 80px;">
+                                <div class="progress-bar {% if r.status == 'OK' %}progress-safe{% elif r.status == 'CONDONABLE' %}progress-condonable{% else %}progress-shortage{% endif %}"
+                                     style="width: {{ r.percentage }}%;"></div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if r.status == 'OK' %}
+                            <span class="badge-status badge-status-ok"><i class="fa-solid fa-circle-check"></i> Safe (&ge;75%)</span>
+                            {% elif r.status == 'CONDONABLE' %}
+                            <span class="badge-status badge-status-condonable"><i class="fa-solid fa-triangle-exclamation"></i> Condonable (65%-74%)</span>
+                            {% else %}
+                            <span class="badge-status badge-status-shortage"><i class="fa-solid fa-circle-xmark"></i> Shortage (<65%)</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if r.required_recovery == 0 %}
+                            <span class="text-success small fw-semibold"><i class="fa-solid fa-check"></i> 0 (Safe)</span>
+                            {% else %}
+                            <span class="fw-bold text-danger">{{ r.required_recovery }}</span> <small class="text-muted">classes</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if r.feasibility == 'POSSIBLE' %}
+                            <span class="badge-status badge-feasibility-possible"><i class="fa-solid fa-check-double"></i> Possible ({{ r.required_recovery }} &le; {{ r.remaining_classes }})</span>
+                            {% elif r.feasibility == 'IMPOSSIBLE' %}
+                            <span class="badge-status badge-feasibility-impossible"><i class="fa-solid fa-ban"></i> Impossible ({{ r.required_recovery }} &gt; {{ r.remaining_classes }})</span>
+                            {% else %}
+                            <span class="badge-status badge-feasibility-safe"><i class="fa-solid fa-shield-check"></i> Not Required</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#editModal{{ r.id }}" title="Quick Edit">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                                <a href="{{ url_for('students.view_student_profile', id=r.student.id) }}" class="btn btn-outline-primary btn-sm" title="View Profile">
+                                    <i class="fa-solid fa-eye"></i>
+                                </a>
+                            </div>
+
+                            <!-- Edit Modal for Record {{ r.id }} -->
+                            <div class="modal fade" id="editModal{{ r.id }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content">
+                                        <form method="POST" action="{{ url_for('attendance.save_attendance') }}">
+                                            <input type="hidden" name="student_id" value="{{ r.student_id }}">
+                                            <input type="hidden" name="course_id" value="{{ r.course_id }}">
+                                            <div class="modal-header">
+                                                <h6 class="modal-title fw-bold">Update Attendance: {{ r.student.name }} ({{ r.course.course_id }})</h6>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <div class="row g-3">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small fw-semibold">Attended Classes (A)</label>
+                                                        <input type="number" name="attended" class="form-control form-control-sm" value="{{ r.attended }}" min="0" required>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small fw-semibold">Total Conducted (T)</label>
+                                                        <input type="number" name="total_conducted" class="form-control form-control-sm" value="{{ r.total_conducted }}" min="0" required>
+                                                    </div>
+                                                    <div class="col-md-12">
+                                                        <label class="form-label small fw-semibold">Remaining Classes (R)</label>
+                                                        <input type="number" name="remaining_classes" class="form-control form-control-sm" value="{{ r.remaining_classes }}" min="0" required>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-sm btn-primary">Save Changes</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="text-center py-4 text-muted">
+                            <i class="fa-regular fa-folder-open fs-3 mb-2 d-block opacity-50"></i>
+                            No attendance records match the selected query.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Recent Import Processing Jobs -->
+    {% if recent_jobs %}
+    <div class="dashboard-card">
+        <div class="dashboard-card-header">
+            <h5 class="dashboard-card-title">
+                <i class="fa-solid fa-list-check text-primary"></i> Streaming CSV Processing Log
+            </h5>
+            <span class="badge bg-light text-secondary border">Streaming O(U) Architecture</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-custom">
+                <thead>
+                    <tr>
+                        <th>Job ID</th>
+                        <th>Filename</th>
+                        <th>Import Mode</th>
+                        <th>Rows Streamed</th>
+                        <th>Valid / Invalid</th>
+                        <th>Status</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for job in recent_jobs %}
+                    <tr>
+                        <td><code>{{ job.job_id }}</code></td>
+                        <td>{{ job.filename }}</td>
+                        <td><span class="badge bg-light text-dark border">{{ job.import_mode | capitalize }}</span></td>
+                        <td>{{ job.total_rows }} rows</td>
+                        <td>
+                            <span class="text-success fw-semibold">{{ job.valid_rows }} valid</span> / 
+                            <span class="text-danger fw-semibold">{{ job.invalid_rows }} invalid</span>
+                        </td>
+                        <td>
+                            {% if job.status == 'completed' %}
+                            <span class="badge bg-success">Completed</span>
+                            {% else %}
+                            <span class="badge bg-danger">Failed</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-muted small">{{ job.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal 1: Single Record Entry with Live Prediction -->
+<div class="modal fade" id="recordAttendanceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('attendance.save_attendance') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Record Single Attendance</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Select Course</label>
+                        <select name="course_id" class="form-select form-select-sm" required>
+                            <option value="">-- Choose Course --</option>
+                            {% for c in courses %}
+                            <option value="{{ c.id }}">{{ c.course_id }} — {{ c.course_name }} (Total Conducted: {{ c.total_conducted }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Select Student</label>
+                        <select name="student_id" class="form-select form-select-sm" required>
+                            <option value="">-- Choose Student --</option>
+                            {% for s in students %}
+                            <option value="{{ s.id }}">{{ s.student_id }} — {{ s.name }} ({{ s.department }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <label class="form-label small fw-semibold">Attended</label>
+                            <input type="number" id="inputAttended" name="attended" class="form-control form-control-sm" placeholder="e.g. 30" min="0" required>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small fw-semibold">Total Conducted</label>
+                            <input type="number" id="inputTotal" name="total_conducted" class="form-control form-control-sm" placeholder="e.g. 50" min="0" required>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small fw-semibold">Remaining</label>
+                            <input type="number" id="inputRemaining" name="remaining_classes" class="form-control form-control-sm" placeholder="e.g. 20" min="0" required>
+                        </div>
+                    </div>
+
+                    <!-- Live Calculation Preview -->
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold text-muted">Live Shortage & Recovery Forecast:</label>
+                        <div id="liveCalculationPreview">
+                            <div class="text-muted small">Enter attended and total counts to calculate prediction.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Save Attendance Record</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal 2: CSV Batch Upload -->
+<div class="modal fade" id="uploadCsvModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('attendance.upload_csv') }}" enctype="multipart/form-data">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Batch Upload Attendance (CSV)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Select CSV File</label>
+                        <input type="file" name="csv_file" class="form-control form-control-sm" accept=".csv" required>
+                        <small class="text-muted d-block mt-1">Columns required: <code>StudentID,CourseID,Attended,Total,RemainingClasses</code></small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Import Mode Configuration</label>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="import_mode" id="modeSnapshot" value="snapshot" checked>
+                            <label class="form-check-label small" for="modeSnapshot">
+                                <strong>Snapshot Mode (Recommended)</strong>
+                                <span class="d-block text-muted">Updates existing totals to uploaded numbers. Prevents accidental double-counting.</span>
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="import_mode" id="modeAggregate" value="aggregate">
+                            <label class="form-check-label small" for="modeAggregate">
+                                <strong>Aggregate / Incremental Mode</strong>
+                                <span class="d-block text-muted">Sums attended and total counts with existing records (ideal for individual session logs).</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info py-2 small mb-0">
+                        <i class="fa-solid fa-circle-info me-1"></i>
+                        Uses Python streaming generator. Validates row-by-row and commits in configurable transactional batches.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Process & Import Dataset</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/attendance.js') }}"></script>
+{% endblock %}

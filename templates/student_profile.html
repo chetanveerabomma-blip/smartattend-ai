@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Student Attendance Profile — {{ student.name }} ({{ student.student_id }}){% endblock %}
+{% block breadcrumb %}Student Attendance Profile{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+    <!-- Student Header Card -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white">
+        <div class="card-body p-4">
+            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold fs-3 shadow-sm" style="width: 72px; height: 72px;">
+                        {{ student.name[0] | upper }}
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <h3 class="fw-bold mb-0 text-dark">{{ student.name }}</h3>
+                            <span class="badge bg-primary">{{ student.student_id }}</span>
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">{{ student.enrollment_status }}</span>
+                        </div>
+                        <div class="text-muted small">
+                            <span class="me-3"><i class="fa-solid fa-graduation-cap me-1 text-primary"></i> {{ student.department }}</span>
+                            <span class="me-3"><i class="fa-solid fa-calendar-days me-1 text-primary"></i> Year {{ student.year }}, Section {{ student.section }}</span>
+                            <span><i class="fa-regular fa-envelope me-1 text-primary"></i> {{ student.email }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Overall Attendance Score -->
+                <div class="d-flex align-items-center gap-3 bg-light rounded-3 p-3 border">
+                    <div class="text-end">
+                        <small class="text-muted d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Aggregate Attendance</small>
+                        <div class="fs-3 fw-bold {% if overall_pct >= 75 %}text-success{% elif overall_pct >= 65 %}text-warning{% else %}text-danger{% endif %}">
+                            {{ overall_pct }}%
+                        </div>
+                        <small class="text-muted">{{ tot_attended }} / {{ tot_conducted }} classes</small>
+                    </div>
+                    <div style="width: 50px; height: 50px;">
+                        {% if overall_pct >= 75 %}
+                        <div class="rounded-circle bg-success bg-opacity-10 text-success d-flex align-items-center justify-content-center h-100 fs-4">
+                            <i class="fa-solid fa-shield-check"></i>
+                        </div>
+                        {% elif overall_pct >= 65 %}
+                        <div class="rounded-circle bg-warning bg-opacity-10 text-warning d-flex align-items-center justify-content-center h-100 fs-4">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                        {% else %}
+                        <div class="rounded-circle bg-danger bg-opacity-10 text-danger d-flex align-items-center justify-content-center h-100 fs-4">
+                            <i class="fa-solid fa-circle-exclamation"></i>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Standing Breakdown Pills -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="metric-card metric-safe">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="metric-label">Safe Courses (&ge; 75%)</div>
+                        <div class="metric-value text-success">{{ safe_courses }}</div>
+                        <div class="metric-subtext">On track for examinations</div>
+                    </div>
+                    <div class="metric-icon-wrap"><i class="fa-solid fa-circle-check"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="metric-card metric-condonable">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="metric-label">Condonable (65% - 74%)</div>
+                        <div class="metric-value text-warning">{{ condonables }}</div>
+                        <div class="metric-subtext">Requires recovery effort</div>
+                    </div>
+                    <div class="metric-icon-wrap"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="metric-card metric-shortage">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="metric-label">Shortage Courses (&lt; 65%)</div>
+                        <div class="metric-value text-danger">{{ shortages }}</div>
+                        <div class="metric-subtext">Critical academic alert</div>
+                    </div>
+                    <div class="metric-icon-wrap"><i class="fa-solid fa-circle-xmark"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content: Course Cards and What-If Simulator -->
+    <div class="row g-4">
+        <!-- Enrolled Courses Breakdown -->
+        <div class="col-lg-8">
+            <div class="dashboard-card mb-4">
+                <div class="dashboard-card-header">
+                    <h5 class="dashboard-card-title">
+                        <i class="fa-solid fa-book-bookmark text-primary"></i> Course-wise Attendance & Recovery Breakdown
+                    </h5>
+                    <span class="badge bg-light text-secondary border">Target: 75% Statutory Target</span>
+                </div>
+                <div class="dashboard-card-body p-0">
+                    <div class="list-group list-group-flush">
+                        {% for r in records %}
+                        <div class="list-group-item p-3 border-bottom">
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-2">
+                                <div>
+                                    <span class="badge bg-light text-dark border me-1 fw-bold">{{ r.course.course_id }}</span>
+                                    <strong class="text-dark">{{ r.course.course_name }}</strong>
+                                    <small class="text-muted d-block mt-1">
+                                        Faculty: {{ r.course.faculty_name or 'Faculty Assigned' }} &bull; Semester {{ r.course.semester }}
+                                    </small>
+                                </div>
+                                <div class="text-md-end">
+                                    <div class="fs-4 fw-bold {% if r.status == 'OK' %}text-success{% elif r.status == 'CONDONABLE' %}text-warning{% else %}text-danger{% endif %}">
+                                        {{ r.percentage }}%
+                                    </div>
+                                    <small class="text-muted">{{ r.attended }} attended of {{ r.total_conducted }} classes</small>
+                                </div>
+                            </div>
+
+                            <!-- Progress Bar -->
+                            <div class="progress progress-attendance mb-2" style="height: 10px;">
+                                <div class="progress-bar {% if r.status == 'OK' %}progress-safe{% elif r.status == 'CONDONABLE' %}progress-condonable{% else %}progress-shortage{% endif %}"
+                                     style="width: {{ r.percentage }}%;"></div>
+                            </div>
+
+                            <!-- Evaluation Chips & Feasibility Statement -->
+                            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 pt-1">
+                                <div class="d-flex flex-wrap align-items-center gap-2">
+                                    {% if r.status == 'OK' %}
+                                    <span class="badge-status badge-status-ok"><i class="fa-solid fa-circle-check"></i> Safe Standing</span>
+                                    {% elif r.status == 'CONDONABLE' %}
+                                    <span class="badge-status badge-status-condonable"><i class="fa-solid fa-triangle-exclamation"></i> Condonable Standing</span>
+                                    {% else %}
+                                    <span class="badge-status badge-status-shortage"><i class="fa-solid fa-circle-xmark"></i> Attendance Shortage</span>
+                                    {% endif %}
+
+                                    {% if r.feasibility == 'POSSIBLE' %}
+                                    <span class="badge-status badge-feasibility-possible"><i class="fa-solid fa-check-double"></i> Recovery Feasible</span>
+                                    {% elif r.feasibility == 'IMPOSSIBLE' %}
+                                    <span class="badge-status badge-feasibility-impossible"><i class="fa-solid fa-ban"></i> Recovery Impossible</span>
+                                    {% else %}
+                                    <span class="badge-status badge-feasibility-safe"><i class="fa-solid fa-shield-check"></i> Safe Benchmark Met</span>
+                                    {% endif %}
+                                </div>
+
+                                <div class="small">
+                                    {% if r.required_recovery > 0 %}
+                                    <span class="text-secondary">Needs <strong>{{ r.required_recovery }}</strong> consecutive classes</span>
+                                    <span class="text-muted">({{ r.remaining_classes }} remaining in semester)</span>
+                                    {% else %}
+                                    <span class="text-success fw-semibold"><i class="fa-solid fa-check"></i> 0 classes needed</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- Guidance Message -->
+                            <div class="mt-2 p-2 rounded bg-light border small text-secondary">
+                                <i class="fa-solid fa-circle-info text-primary me-1"></i>
+                                {{ r.guidance_message }}
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="p-4 text-center text-muted">
+                            <i class="fa-solid fa-folder-open fs-3 mb-2 d-block opacity-50"></i>
+                            No course records found for this student.
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- What-If Recovery Scenario Simulator -->
+        <div class="col-lg-4">
+            <div class="dashboard-card">
+                <div class="dashboard-card-header bg-primary bg-opacity-10 border-bottom border-primary border-opacity-25">
+                    <h5 class="dashboard-card-title text-primary">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> "What-If" Scenario Simulator
+                    </h5>
+                </div>
+                <div class="dashboard-card-body">
+                    <p class="small text-muted mb-3">
+                        Model the exact impact on your attendance percentage before future classes happen. 
+                        <strong>Does not modify database records.</strong>
+                    </p>
+
+                    <form id="whatIfSimulationForm">
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Select Course</label>
+                            <select id="simRecordSelect" class="form-select form-select-sm" required>
+                                <option value="">-- Choose Course --</option>
+                                {% for r in records %}
+                                <option value="{{ r.id }}">
+                                    {{ r.course.course_id }} (Current: {{ r.percentage }}%)
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Future Classes Attended (+x)</label>
+                            <input type="number" id="simAttendedAdd" class="form-control form-control-sm" value="5" min="0" required>
+                            <small class="text-muted" style="font-size: 0.74rem;">E.g., "What if I attend the next 5 classes?"</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Future Classes Missed (+y)</label>
+                            <input type="number" id="simMissedAdd" class="form-control form-control-sm" value="0" min="0">
+                            <small class="text-muted" style="font-size: 0.74rem;">Optional: test scenarios with absences.</small>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-sm w-100 py-2 fw-semibold">
+                            <i class="fa-solid fa-bolt me-1"></i> Simulate Outcome
+                        </button>
+                    </form>
+
+                    <!-- Simulation Result Container -->
+                    <div id="simulationResult" class="mt-3"></div>
+
+                    <div class="mt-4 p-3 bg-light rounded border small">
+                        <div class="fw-bold text-dark mb-1"><i class="fa-solid fa-circle-question text-info me-1"></i> How is this calculated?</div>
+                        <div class="text-muted" style="font-size: 0.78rem;">
+                            Formula: <code>((A + x) / (T + x + y)) * 100</code>.
+                            Assumes consecutive attendance without affecting existing semester records.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/attendance.js') }}"></script>
+{% endblock %}

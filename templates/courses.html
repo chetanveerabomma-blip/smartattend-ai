@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}Course & Curriculum Management — SmartAttend AI{% endblock %}
+{% block breadcrumb %}Courses & Curriculum{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+    <!-- Header -->
+    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
+        <div>
+            <h3 class="fw-bold mb-1 text-dark">Course & Curriculum Management</h3>
+            <p class="text-muted small mb-0">Configure academic subjects, faculty instructors, conducted class totals, and remaining slots.</p>
+        </div>
+        <div>
+            {% if session.get('role') == 'admin' %}
+            <button class="btn btn-primary btn-sm d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#addCourseModal">
+                <i class="fa-solid fa-plus"></i>
+                <span>Add Course</span>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Filter & Search Toolbar -->
+    <div class="dashboard-card mb-4">
+        <div class="dashboard-card-body p-3">
+            <form method="GET" action="{{ url_for('courses.list_courses') }}" class="row g-2 align-items-center">
+                <div class="col-md-5">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+                        <input type="text" name="search" class="form-control" placeholder="Search course code or subject title..." value="{{ search }}">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select name="dept" class="form-select form-select-sm">
+                        <option value="">All Departments</option>
+                        {% for d in departments %}
+                        <option value="{{ d }}" {% if selected_dept == d %}selected{% endif %}>{{ d }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select name="semester" class="form-select form-select-sm">
+                        <option value="">All Semesters</option>
+                        {% for sem in [1, 2, 3, 4, 5, 6, 7, 8] %}
+                        <option value="{{ sem }}" {% if selected_sem == sem %}selected{% endif %}>Semester {{ sem }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm flex-grow-1">Filter</button>
+                    <a href="{{ url_for('courses.list_courses') }}" class="btn btn-outline-secondary btn-sm" title="Reset">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Courses Table -->
+    <div class="dashboard-card">
+        <div class="dashboard-card-header">
+            <h5 class="dashboard-card-title">
+                <i class="fa-solid fa-book-open text-primary"></i> Academic Offerings ({{ courses | length }})
+            </h5>
+            <span class="text-muted small">Target Benchmark: 75%</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-custom">
+                <thead>
+                    <tr>
+                        <th>Course Code</th>
+                        <th>Subject Title</th>
+                        <th>Department</th>
+                        <th>Semester</th>
+                        <th>Assigned Faculty</th>
+                        <th>Classes Conducted</th>
+                        <th>Remaining Classes</th>
+                        <th>Enrolled Students</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in courses %}
+                    <tr>
+                        <td><code>{{ c.course_id }}</code></td>
+                        <td><div class="fw-bold">{{ c.course_name }}</div></td>
+                        <td>{{ c.department }}</td>
+                        <td><span class="badge bg-light text-dark border">Sem {{ c.semester }}</span></td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="fa-solid fa-chalkboard-user text-primary"></i>
+                                <span>{{ c.faculty_name or 'Unassigned' }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <strong>{{ c.total_conducted }}</strong> <small class="text-muted">held</small>
+                        </td>
+                        <td>
+                            <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">{{ c.remaining_classes }} remaining</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-secondary border">{{ c.enrolled_students_count }} students</span>
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('attendance.manage_attendance', course_id=c.id) }}" class="btn btn-outline-primary btn-sm" title="View Course Attendance">
+                                    <i class="fa-solid fa-clipboard-user"></i>
+                                </a>
+                                {% if session.get('role') == 'admin' %}
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#editCourseModal{{ c.id }}" title="Edit Course">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteCourseModal{{ c.id }}" title="Delete Course">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+
+                            {% if session.get('role') == 'admin' %}
+                            <!-- Edit Course Modal -->
+                            <div class="modal fade" id="editCourseModal{{ c.id }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content">
+                                        <form method="POST" action="{{ url_for('courses.edit_course', id=c.id) }}">
+                                            <div class="modal-header">
+                                                <h6 class="modal-title fw-bold">Edit Course: {{ c.course_id }}</h6>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold">Course Title</label>
+                                                    <input type="text" name="course_name" class="form-control form-control-sm" value="{{ c.course_name }}" required>
+                                                </div>
+                                                <div class="row g-2 mb-3">
+                                                    <div class="col-8">
+                                                        <label class="form-label small fw-semibold">Department</label>
+                                                        <input type="text" name="department" class="form-control form-control-sm" value="{{ c.department }}" required>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <label class="form-label small fw-semibold">Semester</label>
+                                                        <input type="number" name="semester" class="form-control form-control-sm" value="{{ c.semester }}" min="1" max="8" required>
+                                                    </div>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold">Assigned Faculty</label>
+                                                    <select name="faculty_id" class="form-select form-select-sm">
+                                                        <option value="">-- Unassigned --</option>
+                                                        {% for f in all_faculty %}
+                                                        <option value="{{ f.id }}" {% if c.faculty_id == f.id %}selected{% endif %}>{{ f.name }} ({{ f.department }})</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="row g-2 mb-3">
+                                                    <div class="col-6">
+                                                        <label class="form-label small fw-semibold">Conducted Classes</label>
+                                                        <input type="number" name="total_conducted" class="form-control form-control-sm" value="{{ c.total_conducted }}" min="0" required>
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <label class="form-label small fw-semibold">Remaining Classes</label>
+                                                        <input type="number" name="remaining_classes" class="form-control form-control-sm" value="{{ c.remaining_classes }}" min="0" required>
+                                                    </div>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="sync_remaining" value="1" id="syncCheck{{ c.id }}">
+                                                    <label class="form-check-label small text-muted" for="syncCheck{{ c.id }}">
+                                                        Update remaining classes across all enrolled student records
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-sm btn-primary">Update Course</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Delete Course Modal -->
+                            <div class="modal fade" id="deleteCourseModal{{ c.id }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content">
+                                        <form method="POST" action="{{ url_for('courses.delete_course', id=c.id) }}">
+                                            <div class="modal-header">
+                                                <h6 class="modal-title fw-bold text-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i> Delete Course</h6>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p class="mb-2">Delete <strong>{{ c.course_name }}</strong> (<code>{{ c.course_id }}</code>)?</p>
+                                                <p class="small text-danger mb-0">This will remove all associated attendance records for this subject.</p>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-sm btn-danger">Yes, Delete Course</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="text-center py-4 text-muted">
+                            <i class="fa-solid fa-book-bookmark fs-3 mb-2 d-block opacity-50"></i>
+                            No courses found matching current criteria.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add Course Modal -->
+{% if session.get('role') == 'admin' %}
+<div class="modal fade" id="addCourseModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('courses.add_course') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Add New Course</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <label class="form-label small fw-semibold">Course ID</label>
+                            <input type="text" name="course_id" class="form-control form-control-sm" placeholder="e.g. CS201" required>
+                        </div>
+                        <div class="col-8">
+                            <label class="form-label small fw-semibold">Subject Title</label>
+                            <input type="text" name="course_name" class="form-control form-control-sm" placeholder="e.g. Design & Analysis of Algorithms" required>
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-8">
+                            <label class="form-label small fw-semibold">Department</label>
+                            <input type="text" name="department" class="form-control form-control-sm" placeholder="e.g. Computer Science" required>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small fw-semibold">Semester</label>
+                            <input type="number" name="semester" class="form-control form-control-sm" value="3" min="1" max="8" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Assigned Faculty</label>
+                        <select name="faculty_id" class="form-select form-select-sm">
+                            <option value="">-- Choose Faculty --</option>
+                            {% for f in all_faculty %}
+                            <option value="{{ f.id }}">{{ f.name }} ({{ f.department }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Conducted Classes</label>
+                            <input type="number" name="total_conducted" class="form-control form-control-sm" value="0" min="0" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Remaining Classes</label>
+                            <input type="number" name="remaining_classes" class="form-control form-control-sm" value="40" min="0" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Create Course</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
